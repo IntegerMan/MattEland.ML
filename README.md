@@ -8,3 +8,4 @@ The libraries are still in development and may grow or shrink over time as more 
 The current libraries under development are:
 
 - [MattEland.ML.DataFrames](https://github.com/IntegerMan/MattEland.ML/tree/main/MattEland.ML/MattEland.ML.DataFrames) - Focused on working with the `Microsoft.Data.Analysis.DataFrame` and its columns.
+- [MattEland.ML.Interactive](https://github.com/IntegerMan/MattEland.ML/tree/main/MattEland.ML/MattEland.ML.Interactive) - Improves aspects of working with ML.NET from a Polyglot Notebook.

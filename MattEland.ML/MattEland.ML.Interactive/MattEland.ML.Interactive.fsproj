@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <Version>0.0.1</Version>
+        <Description>This library offers extensions to make working with ML.NET from a Polyglot Notebook a better experience.</Description>
+        <Copyright>Matt Eland</Copyright>
+        <PackageProjectUrl>https://github.com/IntegerMan/MattEland.ML</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/IntegerMan/MattEland.ML</RepositoryUrl>
+    </PropertyGroup>
+    
+    <PropertyGroup>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="extension.dib" Pack="true" PackagePath="interactive-extensions/dotnet" />
+    </ItemGroup>
+    
+    <ItemGroup>
+        <Compile Include="Library.fs"/>
+        <Content Include="README.md" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.ML" Version="3.0.1" />
+      <PackageReference Include="Plotly.NET" Version="5.0.0" />
+    </ItemGroup>
+
+</Project>

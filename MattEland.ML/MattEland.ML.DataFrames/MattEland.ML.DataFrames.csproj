@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageId>MattEland.ML.DataFrames</PackageId>
-        <Version>0.0.2</Version>
+        <Version>0.0.3</Version>
         <Authors>MattEland.ML.DataFrames</Authors>
         <Description>A collection of extensions to help work with Microsoft.Data.Analysis DataFrames.</Description>
         <Copyright>Matt Eland</Copyright>
