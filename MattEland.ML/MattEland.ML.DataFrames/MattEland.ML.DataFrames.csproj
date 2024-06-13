@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageId>MattEland.ML.DataFrames</PackageId>
+        <Version>0.0.2</Version>
+        <Authors>MattEland.ML.DataFrames</Authors>
+        <Description>A collection of extensions to help work with Microsoft.Data.Analysis DataFrames.</Description>
+        <Copyright>Matt Eland</Copyright>
+        <PackageProjectUrl>https://github.com/IntegerMan/MattEland.ML</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/IntegerMan/MattEland.ML</RepositoryUrl>
+        <AssemblyName>MattEland.ML.DataFrames</AssemblyName>
+        <RootNamespace>MattEland.ML.DataFrames</RootNamespace>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+    <ItemGroup>
+      <Reference Include="Microsoft.Data.Analysis">
+        <HintPath>..\..\..\..\.nuget\packages\microsoft.data.analysis\0.21.1\lib\netstandard2.0\Microsoft.Data.Analysis.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+</Project>
