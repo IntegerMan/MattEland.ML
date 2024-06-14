@@ -26,3 +26,24 @@ MLCharts.RenderConfusionMatrix(results.BestRun.ValidationMetrics.ConfusionMatrix
 ```
 
 There are overloads available for `BinaryValidationMetrics`, `MulticlassClassificationMetrics`, `RunDetails<BinaryClassificationMetrics>`, and `RunDetails<MulticlassClassificationMetrics>`
+
+### Classification Metrics
+
+```cs
+MLCharts.RenderClassificationMetrics(results.BestRun.ValidationMetrics)
+```
+
+```cs
+MLCharts.RenderPartialClassificationMetrics(results.BestRun.ValidationMetrics)
+```
+
+
+### Classification Report
+
+```cs
+MLCharts.ClassificationReport(results.BestRun);
+```
+
+```cs
+MLCharts.NormalizedClassificationReport(results.BestRun);
+```
