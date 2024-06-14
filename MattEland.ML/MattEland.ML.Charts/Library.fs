@@ -1,6 +1,7 @@
 ﻿namespace MattEland.ML.Charts
 
 open Microsoft.ML
+open Microsoft.ML.AutoML
 open Microsoft.ML.Data
 open Plotly.NET
 open Plotly.NET.LayoutObjects
@@ -8,72 +9,102 @@ open Plotly.NET.LayoutObjects
 type MLCharts =
     static member private blues = StyleParam.Colorscale.Custom [ 0, Color.fromString("#FFFFFF"); 0.5, Color.fromString("#009dcf"); 1, Color.fromString("#003171") ]
 
-    static member private RenderStandardConfusionMatrix tp fn fp tn =   
-        let precisionP = float tp / (float tp + float fp)
-        let precisionN = float tn / (float tn + float fn)
-        let recallP = float tp / (float tp + float fn)
-        let recallN = float tn / (float tn + float fp)
+    static member private RenderStandardConfusionMatrix(cm:ConfusionMatrix, classNames: string seq) =
+        let white = Color.fromString("#FFFFFF")
+        let darkBlue = Color.fromString("#000099")
+        let numFormat = "F0"
+        let decFormat = "F2"
+        
+        let annotations =
+            [
+                for y = 0 to cm.Counts.Count - 1 do
+                    for x = 0 to cm.Counts.Count - 1 do
+                        let text = cm.GetCountForClassPair(x, y).ToString(numFormat)
+                        yield Annotation.init(X = x, Y = y, Text = text, ShowArrow = false, BGColor = white, BorderColor = darkBlue, Font = Font.init(Size = 18))
 
-        let aTp = Annotation.init(X = 0, Y = 0, Text = $"%d{tp}", ShowArrow = false, BGColor = Color.fromString("#FFFFFF"), BorderColor = Color.fromString("#000099"), Font = Font.init(Size = 18))
-        let aFn = Annotation.init(X = 1, Y = 0, Text = $"%d{fn}", ShowArrow = false, BGColor = Color.fromString("#FFFFFF"), BorderColor = Color.fromString("#000099"), Font = Font.init(Size = 18))
-        let aFp = Annotation.init(X = 0, Y = 1, Text = $"%d{fp}", ShowArrow = false, BGColor = Color.fromString("#FFFFFF"), BorderColor = Color.fromString("#000099"), Font = Font.init(Size = 18))
-        let aTn = Annotation.init(X = 1, Y = 1, Text = $"%d{tn}", ShowArrow = false, BGColor = Color.fromString("#FFFFFF"), BorderColor = Color.fromString("#000099"), Font = Font.init(Size = 18))
-        let aPrecP = Annotation.init(X = 0, Y = 1.55, Text = "Precision " + precisionP.ToString("F2"),  Font = Font.init(Size = 14), ShowArrow=false)
-        let aPrecN = Annotation.init(X = 1, Y = 1.55, Text = "Precision " + precisionN.ToString("F2"),  Font = Font.init(Size = 14), ShowArrow=false)      
-        let aRecP = Annotation.init(X = 1.55, Y = 0, Text = "Recall " + recallP.ToString("F2"),  Font = Font.init(Size = 14), ShowArrow=false, TextAngle = -90.0)
-        let aRecN = Annotation.init(X = 1.55, Y = 1, Text = "Recall " + recallN.ToString("F2"),  Font = Font.init(Size = 14), ShowArrow=false, TextAngle = -90.0)      
+                for c = 0 to cm.NumberOfClasses - 1 do                        
+                    yield Annotation.init(X = c, Y = float cm.NumberOfClasses - 1. + 0.55, Text = "Precision " + cm.PerClassPrecision.[c].ToString(decFormat), ShowArrow = false, Font = Font.init(Size = 14))
+                    yield Annotation.init(X = float cm.NumberOfClasses - 1. + 0.55, Y = c, Text = "Recall " + cm.PerClassRecall.[c].ToString(decFormat), ShowArrow = false, TextAngle = -90.0, Font = Font.init(Size = 14))
+            ]
 
-        let matrix = [|
-                        [| tp; fp |]
-                        [| fn; tn |]
-                     |]
-
+        let matrix = [| for y = 0 to cm.Counts.Count - 1 do
+                         [| for x = 0 to cm.Counts.Count - 1 do
+                              yield cm.GetCountForClassPair(x, y) |] |]
+        
         Chart.Heatmap(zData = matrix,
                       ColorScale = MLCharts.blues,
-                      X = [ "Positive"; "Negative"],
-                      Y = [ "Positive"; "Negative"],
+                      X = classNames,
+                      Y = classNames,
                       ReverseYAxis = true)
         |> Chart.withTitle "Confusion Matrix" 
         |> Chart.withXAxisStyle(TitleText = "Predicted", Side = StyleParam.Side.Top, ShowGrid = false, ShowBackground = false, ShowLine = false)
         |> Chart.withYAxisStyle(TitleText = "Actual", Side = StyleParam.Side.Left, ShowGrid = false, ShowBackground = false, ShowLine = false)
-        |> Chart.withAnnotations([ aTp; aFn; aFp; aTn; aPrecP; aPrecN; aRecP; aRecN])
+        |> Chart.withAnnotations(annotations)
         
-    static member private RenderNormalizedConfusionMatrix tp fn fp tn =
-        let precisionP = float tp / (float tp + float fp)
-        let precisionN = float tn / (float tn + float fn)
-        let recallP = float tp / (float tp + float fn)
-        let recallN = float tn / (float tn + float fp)
+    static member private RenderNormalizedConfusionMatrix(cm:ConfusionMatrix, classNames: string seq) =
+        let white = Color.fromString("#FFFFFF")
+        let darkBlue = Color.fromString("#000099")
+        let decFormat = "F2"
 
-        let total = float (tp + fn + fp + tn)
-        let normalizedTp = (float tp / total)
-        let normalizedFn = (float fn / total)
-        let normalizedFp = (float fp / total)
-        let normalizedTn = (float tn / total)
+        let total = cm.Counts |> Seq.sumBy (fun counts -> Seq.sum counts)
 
-        let matrix = [| [| normalizedTp; normalizedFp |]; [| normalizedFn; normalizedTn |] |]
-        let classes = [ "Positive"; "Negative" ]
+        let annotations =
+            [
+                for y = 0 to cm.Counts.Count - 1 do
+                    for x = 0 to cm.Counts.Count - 1 do
+                        let value = cm.GetCountForClassPair(x, y) / float total
+                        let text = value.ToString(decFormat)
+                        yield Annotation.init(X = x, Y = y, Text = text, ShowArrow = false, BGColor = white, BorderColor = darkBlue, Font = Font.init(Size = 18))
 
-        let aTp = Annotation.init(X = 0, Y = 0, Text = $"%.1f{normalizedTp}", ShowArrow = false, BGColor = Color.fromString("#FFFFFF"), BorderColor = Color.fromString("#000099"), Font = Font.init(Size = 18))
-        let aFn = Annotation.init(X = 1, Y = 0, Text = $"%.1f{normalizedFn}", ShowArrow = false, BGColor = Color.fromString("#FFFFFF"), BorderColor = Color.fromString("#000099"), Font = Font.init(Size = 18))
-        let aFp = Annotation.init(X = 0, Y = 1, Text = $"%.1f{normalizedFp}", ShowArrow = false, BGColor = Color.fromString("#FFFFFF"), BorderColor = Color.fromString("#000099"), Font = Font.init(Size = 18))
-        let aTn = Annotation.init(X = 1, Y = 1, Text = $"%.1f{normalizedTn}", ShowArrow = false, BGColor = Color.fromString("#FFFFFF"), BorderColor = Color.fromString("#000099"), Font = Font.init(Size = 18))
-        let aPrecP = Annotation.init(X = 0, Y = 1.55, Text = "Precision " + precisionP.ToString("F2"),  Font = Font.init(Size = 14), ShowArrow=false)
-        let aPrecN = Annotation.init(X = 1, Y = 1.55, Text = "Precision " + precisionN.ToString("F2"),  Font = Font.init(Size = 14), ShowArrow=false)      
-        let aRecP = Annotation.init(X = 1.55, Y = 0, Text = "Recall " + recallP.ToString("F2"),  Font = Font.init(Size = 14), ShowArrow=false, TextAngle = -90.0)
-        let aRecN = Annotation.init(X = 1.55, Y = 1, Text = "Recall " + recallN.ToString("F2"),  Font = Font.init(Size = 14), ShowArrow=false, TextAngle = -90.0)      
+                for c = 0 to cm.NumberOfClasses - 1 do                        
+                    yield Annotation.init(X = c, Y = float cm.NumberOfClasses - 1. + 0.55, Text = "Precision " + cm.PerClassPrecision.[c].ToString(decFormat), ShowArrow = false, Font = Font.init(Size = 14))
+                    yield Annotation.init(X = float cm.NumberOfClasses - 1. + 0.55, Y = c, Text = "Recall " + cm.PerClassRecall.[c].ToString(decFormat), ShowArrow = false, TextAngle = -90.0, Font = Font.init(Size = 14))
+            ]
 
-        Chart.Heatmap(zData = matrix, ColorScale = MLCharts.blues, X = classes, Y = classes, ReverseYAxis = true)
+        let matrix = [| for y = 0 to cm.Counts.Count - 1 do
+                         [| for x = 0 to cm.Counts.Count - 1 do
+                              yield cm.GetCountForClassPair(x, y) / float total |] |]
+        
+        Chart.Heatmap(zData = matrix,
+                      ColorScale = MLCharts.blues,
+                      X = classNames,
+                      Y = classNames,
+                      ReverseYAxis = true)
         |> Chart.withTitle "Normalized Confusion Matrix" 
-        |> Chart.withXAxisStyle(TitleText = "Predicted", Side = StyleParam.Side.Top)
-        |> Chart.withYAxisStyle(TitleText = "Actual", Side = StyleParam.Side.Left)
-        |> Chart.withAnnotations([ aTp; aFn; aFp; aTn; aPrecP; aPrecN; aRecP; aRecN])
+        |> Chart.withXAxisStyle(TitleText = "Predicted", Side = StyleParam.Side.Top, ShowGrid = false, ShowBackground = false, ShowLine = false)
+        |> Chart.withYAxisStyle(TitleText = "Actual", Side = StyleParam.Side.Left, ShowGrid = false, ShowBackground = false, ShowLine = false)
+        |> Chart.withAnnotations(annotations)
+
         
-    static member RenderConfusionMatrix(cm : ConfusionMatrix, [<System.Runtime.InteropServices.Optional>] normalize: bool) =
-        let tp = cm.GetCountForClassPair(0,0) |> int
-        let tn = cm.GetCountForClassPair(1,1) |> int
-        let fp = cm.GetCountForClassPair(0,1) |> int
-        let fn = cm.GetCountForClassPair(1,0) |> int
-        if normalize then
-            MLCharts.RenderNormalizedConfusionMatrix tp fn fp tn
+    static member RenderConfusionMatrix(confusionMatrix : ConfusionMatrix, [<System.Runtime.InteropServices.Optional>] ?normalize: bool, [<System.Runtime.InteropServices.Optional>] ?classNames: string seq) =
+        let norm = defaultArg normalize false
+        let names = defaultArg classNames (seq { if confusionMatrix.NumberOfClasses = 2 then yield "Positive"; yield "Negative" else yield! [ for i in 0 .. confusionMatrix.NumberOfClasses - 1 -> i.ToString() ] })
+
+        // TODO: Ideally, we could get the class names from the confusion matrix, but the PredictedClassesIndicators property is internal        
+
+        if norm then
+            MLCharts.RenderNormalizedConfusionMatrix(confusionMatrix, names)
         else
-            MLCharts.RenderStandardConfusionMatrix tp fn fp tn
+            MLCharts.RenderStandardConfusionMatrix(confusionMatrix, names)
+
+    static member RenderConfusionMatrix(metrics : BinaryClassificationMetrics, [<System.Runtime.InteropServices.Optional>] ?normalize: bool) =
+        let norm = defaultArg normalize false
+
+        MLCharts.RenderConfusionMatrix(metrics.ConfusionMatrix, norm, [|"Positive"; "Negative"|])
+        
+    static member RenderConfusionMatrix(metrics : MulticlassClassificationMetrics, [<System.Runtime.InteropServices.Optional>] ?normalize: bool, [<System.Runtime.InteropServices.Optional>] ?classNames: string seq) =
+        let norm = defaultArg normalize false
+        let names = defaultArg classNames (seq { yield! [ for i in 0 .. metrics.ConfusionMatrix.NumberOfClasses - 1 -> i.ToString() ] })
+
+        MLCharts.RenderConfusionMatrix(metrics.ConfusionMatrix, norm, names)        
+
+    static member RenderConfusionMatrix(run : RunDetail<MulticlassClassificationMetrics>, [<System.Runtime.InteropServices.Optional>] ?normalize: bool, [<System.Runtime.InteropServices.Optional>] ?classNames: string seq) =
+        let norm = defaultArg normalize false
+        let names = defaultArg classNames (seq { yield! [ for i in 0 .. run.ValidationMetrics.ConfusionMatrix.NumberOfClasses - 1 -> i.ToString() ] })
+
+        MLCharts.RenderConfusionMatrix(run.ValidationMetrics.ConfusionMatrix, norm, names)        
+
+    static member RenderConfusionMatrix(run : RunDetail<BinaryClassificationMetrics>, [<System.Runtime.InteropServices.Optional>] ?normalize: bool) =
+        let norm = defaultArg normalize false
+
+        MLCharts.RenderConfusionMatrix(run.ValidationMetrics.ConfusionMatrix, norm, [| "Positive"; "Negative"|])    
