@@ -4,7 +4,7 @@
         <TargetFramework>net8.0</TargetFramework>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <Version>0.0.3</Version>
+        <Version>0.0.5</Version>
         <Description>Data Science charts for ML.NET and ML.NET AutoML. Built on top of Plotly .NET</Description>
         <Copyright>Matt Eland</Copyright>
         <PackageProjectUrl>https://github.com/integerman/MattEland.ML</PackageProjectUrl>
@@ -24,6 +24,10 @@
       <PackageReference Include="Microsoft.ML" Version="3.0.1" />
       <PackageReference Include="Microsoft.ML.AutoML" Version="0.21.1" />
       <PackageReference Include="Plotly.NET" Version="5.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\MattEland.ML\MattEland.ML.csproj" />
     </ItemGroup>
 
 </Project>

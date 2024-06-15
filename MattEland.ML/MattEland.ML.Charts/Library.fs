@@ -1,5 +1,7 @@
 ﻿namespace MattEland.ML.Charts
 
+open System.Collections.Generic
+open MattEland.ML
 open Microsoft.ML
 open Microsoft.ML.AutoML
 open Microsoft.ML.Data
@@ -8,7 +10,11 @@ open Plotly.NET.LayoutObjects
 open Plotly.NET.StyleParam
 
 type MLCharts =
-    static member private blues = StyleParam.Colorscale.Custom [ 0, Color.fromString("#FFFFFF"); 0.5, Color.fromString("#009dcf"); 1, Color.fromString("#003171") ]
+    static member private blues = Colorscale.Custom [
+        0,      Color.fromString("#FFFFFF")
+        0.5,    Color.fromString("#009dcf")
+        1,      Color.fromString("#003171")
+    ]
 
     static member private RenderStandardConfusionMatrix(cm:ConfusionMatrix, includePrecisionRecall: bool, classNames: string seq) =
         let white = Color.fromString("#FFFFFF")
@@ -25,23 +31,24 @@ type MLCharts =
                 
                 if includePrecisionRecall then
                     for c = 0 to cm.NumberOfClasses - 1 do                        
-                        yield Annotation.init(X = c, Y = float cm.NumberOfClasses - 1. + 0.57, Text = "Precision " + cm.PerClassPrecision.[c].ToString(decFormat), ShowArrow = false, Font = Font.init(Size = 12))
+                        yield Annotation.init(X = c, Y = float cm.NumberOfClasses - 1. + 0.55, Text = "Precision " + cm.PerClassPrecision.[c].ToString(decFormat), ShowArrow = false, Font = Font.init(Size = 12))
                         yield Annotation.init(X = float cm.NumberOfClasses - 1. + 0.55, Y = c, Text = "Recall " + cm.PerClassRecall.[c].ToString(decFormat), ShowArrow = false, TextAngle = -90.0, Font = Font.init(Size = 12))
             ]
 
         let matrix = [| for y = 0 to cm.Counts.Count - 1 do
                          [| for x = 0 to cm.Counts.Count - 1 do
                               yield cm.GetCountForClassPair(x, y) |] |]
-        
+
         Chart.Heatmap(zData = matrix,
                       ColorScale = MLCharts.blues,
+                      //annotationText = text,
                       X = classNames,
                       Y = classNames,
                       ShowScale = false,
                       ReverseYAxis = true)
         |> Chart.withTitle "Confusion Matrix" 
-        |> Chart.withXAxisStyle(TitleText = "Predicted", Side = StyleParam.Side.Top, ShowGrid = false, ShowBackground = false, ShowLine = false)
-        |> Chart.withYAxisStyle(TitleText = "Actual", Side = StyleParam.Side.Left, ShowGrid = false, ShowBackground = false, ShowLine = false)
+        |> Chart.withXAxisStyle(TitleText = "Predicted", Side = Side.Top, ShowGrid = false, ShowBackground = false, ShowLine = false)
+        |> Chart.withYAxisStyle(TitleText = "Actual", Side = Side.Left, ShowGrid = false, ShowBackground = false, ShowLine = false)
         |> Chart.withAnnotations(annotations)
         
     static member private RenderNormalizedConfusionMatrix(cm:ConfusionMatrix, includePrecisionRecall: bool, classNames: string seq) =
@@ -86,7 +93,6 @@ type MLCharts =
         let names = defaultArg classNames (seq { if confusionMatrix.NumberOfClasses = 2 then yield "Positive"; yield "Negative" else yield! [ for i in 0 .. confusionMatrix.NumberOfClasses - 1 -> i.ToString() ] })
 
         // TODO: Ideally, we could get the class names from the confusion matrix, but the PredictedClassesIndicators property is internal        
-
         if norm then
             MLCharts.RenderNormalizedConfusionMatrix(confusionMatrix, true, names)
         else
@@ -180,18 +186,21 @@ type MLCharts =
         
     static member RenderClassificationMetrics(run: RunDetail<MulticlassClassificationMetrics>) =
         MLCharts.RenderClassificationMetrics(run.ValidationMetrics)
-        
-    static member ClassificationReport(run : RunDetail<BinaryClassificationMetrics>) =
-        let confusionMatrix: GenericChart = MLCharts.RenderStandardConfusionMatrix(run.ValidationMetrics.ConfusionMatrix, false, [|"Positive"; "Negative"|])
-        let metricsChart = MLCharts.RenderClassificationMetrics(run.ValidationMetrics)
+
+    static member ClassificationReport(metrics : BinaryClassificationMetrics) =
+        let confusionMatrix: GenericChart = MLCharts.RenderStandardConfusionMatrix(metrics.ConfusionMatrix, false, [|"Positive"; "Negative"|])
+        let metricsChart = MLCharts.RenderClassificationMetrics(metrics)
         
         [ confusionMatrix; metricsChart ]
         |> Chart.Grid(nRows = 2, nCols=1,
                       SubPlotTitles = [""; "Binary Classification Metric"],
                       Pattern = LayoutGridPattern.Independent)
         |> Chart.withTitle "Classification Report"
-        |> Chart.withMarkerStyle (ShowScale = false)
-
+        |> Chart.withMarkerStyle (ShowScale = false)        
+        
+    static member ClassificationReport(run : RunDetail<BinaryClassificationMetrics>) =
+        MLCharts.ClassificationReport(run.ValidationMetrics)        
+        
     static member NormalizedClassificationReport(run : RunDetail<BinaryClassificationMetrics>) =
         let confusionMatrix: GenericChart = MLCharts.RenderNormalizedConfusionMatrix(run.ValidationMetrics.ConfusionMatrix, false, [|"Positive"; "Negative"|])
         let metricsChart = MLCharts.RenderClassificationMetrics(run.ValidationMetrics)
@@ -203,3 +212,18 @@ type MLCharts =
         |> Chart.withTitle "Classification Report"
         |> Chart.withMarkerStyle (ShowScale = false)
 
+    static member FeatureImportances(importances: IDictionary<string, float>, metric: string) =
+        Chart2D.Chart.Column(
+            values=importances.Values,
+            Keys=importances.Keys)
+            |> Chart.withTitle("Feature Importances")
+            |> Chart.withXAxisStyle (TitleText = "Feature")
+            |> Chart.withYAxisStyle (TitleText = "Absolute impact on " + metric)
+            |> Chart.withSize(Width = 800)
+
+    static member FeatureImportances(context: MLContext, model: ITransformer, data: IDataView, permutationCount: int, numFeatures: int) =
+        let transformed: IDataView = model.Transform data
+        let imps = context.BinaryClassification.PermutationFeatureImportanceNonCalibrated(model, transformed, permutationCount = permutationCount)
+        let dict = FeatureImportanceHelper.ToImportancesDictionary(imps, features = numFeatures)
+        MLCharts.FeatureImportances(dict, "F1 Score")
+     
