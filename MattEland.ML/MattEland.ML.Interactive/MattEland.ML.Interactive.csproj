@@ -5,7 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <Version>0.0.5</Version>
+        <Version>0.0.11</Version>
         <Copyright>Matt Eland</Copyright>
     </PropertyGroup>
 
@@ -24,6 +24,11 @@
 
     <ItemGroup>
       <None Include="extension.dib" Pack="true" PackagePath="interactive-extensions/dotnet" />
+    </ItemGroup>
+
+
+    <ItemGroup>
+      <Compile Remove="Implementations\**" />
     </ItemGroup>
 
 </Project>

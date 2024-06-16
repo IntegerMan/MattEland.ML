@@ -4,7 +4,4 @@
 
 #!csharp
 
-Formatter.Register<ITransformer>((transformer, writer) =>
-{
-    writer.Write(MattEland.ML.Interactive.TransformerExtensions.ToMermaid(transformer));
-}, "text/vnd.mermaid");
+MattEland.ML.Interactive.VisualizeTransformerExtension.Load(Microsoft.DotNet.Interactive.KernelInvocationContext.Current.HandlingKernel.RootKernel);
