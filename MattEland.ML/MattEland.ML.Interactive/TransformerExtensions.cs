@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Collections.Immutable;
 using System.Reflection;
 using System.Text;
 using MattEland.ML.Interactive.Details;
@@ -12,95 +13,121 @@ namespace MattEland.ML.Interactive;
 
 public static class TransformerExtensions
 {
-    public static string ToMermaid(this ITransformer transformer)
+    public static string ToMermaid(this ITransformer transformer, bool annotate = false, int maxDepth = 3)
     {
         StringBuilder sb = new();
         sb.AppendLine("stateDiagram-v2");
-
         int index = 1;
-        sb.AppendLine($"{GetName(transformer)}_{index} : " + GetDisplayName(transformer));
-        if (transformer is TransformerChain<ITransformer> chain)
+
+        List<ITransformer> children = GetChildren(transformer).ToList();
+        if (children.Any())
         {
-            sb.AppendLine(chain.BuildFlowchartFromTransformerChain($"{index}"));
+            sb.AppendLine(BuildFlowchartFromChildren(transformer, children, $"{index}", isLR: false, annotate: annotate, maxDepth: maxDepth));
         }
         else
         {
-            sb.AppendLine(GetName(transformer));
+            sb.AppendLine($"t{index}: {GetDisplayName(transformer)}");
+        }
+        return sb.ToString();
+    }
+
+    private static IEnumerable<ITransformer> GetChildren(ITransformer transformer)
+    {
+        FieldInfo? chainField = transformer.GetType().GetField("_chain", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        IEnumerable<ITransformer>? children;
+        if (chainField != null)
+        {
+            children = chainField.GetValue(transformer) as IEnumerable<ITransformer>;
+        }
+        else if (transformer is TransformerChain<ITransformer> chain)
+        {
+            children = chain.ToList();
+        }
+        else
+        {
+            children = transformer as IEnumerable<ITransformer>;
         }
 
-        return sb.ToString();
+        if (children != null)
+        {
+            foreach (var child in children)
+            {
+                yield return child;
+            }
+        }
     }
 
     private static string GetDisplayName(ITransformer transformer)
     {
-        if (transformer.GetType().FullName.Contains("TextFeaturizingEstimator"))
-            return "TextFeaturizingEstimator_Transformer";
+        string result = transformer.GetType().Name;
+        Type? declaringType = transformer.GetType().DeclaringType;
+        if (declaringType != null && transformer.GetType() != declaringType)
+        {
+            result = $"{declaringType.Name}.{result}";
+        }
         
-        return new string(transformer.GetType().Name.Where(char.IsLetter).ToArray());
+        return new string(result.Where(c => char.IsLetter(c) || c == '.').ToArray());
     }
 
-    private static string BuildFlowchartFromTransformerChain(this TransformerChain<ITransformer> transformerChain, string prefix = "", string name = "")
+    private static string BuildFlowchartFromChildren(this ITransformer parent, List<ITransformer> children, string prefix = "", bool isLR = false, bool annotate = false, int maxDepth = 0)
     {
-        List<ITransformer> chain = transformerChain.ToList();
-        
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            name = GetName(transformerChain);
-        }
-
         StringBuilder sb = new();
-        sb.AppendLine($"state {name}_{prefix} {{");
+        
+        sb.AppendLine($"state \"{GetDisplayName(parent)}\" AS t{prefix} {{");
 
-        // Define fields
-        int index = 1;
-        foreach (var transformer in chain)
+        if (isLR)
         {
-            string subprefix = prefix + "_" + index++;
-            string elName = GetName(transformer) + subprefix;
-            sb.AppendLine(elName + ": " + GetDisplayName(transformer));
+            sb.AppendLine("direction LR");
         }
 
-        index = 1;
-        foreach (var transformer in chain)
+        // Loop over all children
+        int index = 1;
+        foreach (var transformer in children)
         {
-            string subprefix = prefix + "_" + index;
-            if (transformer is TransformerChain<ITransformer> subChain)
+            // Define the node
+            string id = $"{prefix}_{index++}";
+            sb.AppendLine($"t{id}: {GetDisplayName(transformer)}");
+
+            // Loop over any nested children
+            List<ITransformer> subTransformers = GetChildren(transformer).ToList();
+            bool renderedChildren = false;
+            if (maxDepth > 1 && subTransformers.Any())
             {
-                sb.AppendLine(BuildFlowchartFromTransformerChain(subChain, subprefix));
-            }
-            else if (transformer.GetType().FullName!.Contains("TextFeaturizingEstimator")) // This relies on the private TextFeaturizingEstimator.Transformer class which is private
-            {
-                FieldInfo chainField = transformer.GetType().GetField("_chain", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
-                sb.AppendLine(BuildFlowchartFromTransformerChain((TransformerChain<ITransformer>)chainField!.GetValue(transformer)!, subprefix, name: "TextFeaturizingEstimator_Transformer"));
+                renderedChildren = true;
+                sb.AppendLine(BuildFlowchartFromChildren(
+                    transformer,
+                    subTransformers,
+                    prefix: id, 
+                    isLR: !isLR,
+                    maxDepth: maxDepth - 1,
+                    annotate: annotate));
             }
 
-/*
-            if (!transformer.GetType().Name.Contains("Prediction"))
+            // If we're annotating, it's time to do that. Don't show notes for expanded parents, though.
+            if (annotate && !renderedChildren)
             {
-                AddNotes(transformer, sb, elName);
+                AddNotes(transformer, sb, $"t{id}", isLR);
             }
-        */
-
-            //last = node;
         }
 
         // Render relationships
-        for (int i = 0; i < chain.Count - 1; i++)
+        for (int i = 0; i < children.Count - 1; i++)
         {
-            string a = GetName(chain[i]) + prefix + "_" + (i + 1);
-            string b = GetName(chain[i + 1]) + prefix + "_" + (i + 2);
+            string a = $"t{prefix}_{i + 1}";
+            string b = $"t{prefix}_{i + 2}";
 
-            sb.AppendLine(a + " --> " + b);
+            sb.AppendLine($"{a} --> {b}");
         }
 
         sb.AppendLine("}");
         return sb.ToString();
     }
 
-    private static void AddNotes(ITransformer transformer, StringBuilder sb, string elName)
+    private static void AddNotes(ITransformer transformer, StringBuilder sb, string elName, bool isLR)
     {
         IEnumerable<FieldInfo> fields = transformer.GetType()
             .GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .Where(f => !f.Name.Contains("TrainSchema"))
             .Where(f => !f.FieldType.Name.Contains("TransformerChain"))
             .Where(f => !f.FieldType.Name.Contains("BitArray"))
             .Where(f => !f.FieldType.Name.Contains("BindableMapper"))
@@ -123,20 +150,37 @@ public static class TransformerExtensions
             }
         }
 
-        if (fieldInfo.Any())
+        string note = BuildNote(transformer, fieldInfo);
+        if (!string.IsNullOrWhiteSpace(note))
         {
-            sb.AppendLine("note right of " + elName);
-            
-            sb.AppendLine(BuildNote(transformer, fieldInfo));
+            if (isLR)
+            {
+                sb.AppendLine($"note left of {elName}");
+            }
+            else
+            {
+                sb.AppendLine($"note right of {elName}");
+            }
 
+            sb.AppendLine(note);
             sb.AppendLine("end note");
         }
     }
 
     private static string BuildNote(ITransformer transformer, Dictionary<string, string> fieldInfo)
     {
+        // Parents should just list children
+        List<ITransformer> children = GetChildren(transformer).ToList();
+        switch (children.Count)
+        {
+            case 1:
+                return "1 Child Transformer: " + GetDisplayName(children.First());
+            case > 1:
+                return $"{children.Count} Child Transformers";
+        }
+        
+        // Not a parent node, so let's get some details
         StringBuilder sb = new();
-
         switch (transformer)
         {
             case TypeConvertingTransformer:
@@ -146,22 +190,34 @@ public static class TransformerExtensions
                 ColumnConcatDetails.BuildNote(fieldInfo, sb);
                 break;
             case MissingValueReplacingTransformer:
-            {
-                string[] values = fieldInfo["_repValues"].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                string[] colPairs = fieldInfo["ColumnPairs"].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-
-                int index = 0;
-                foreach (var col in colPairs)
-                {
-                    sb.AppendLine($"Replace missing values in {col} with {values[index]}");
-                }
+                MissingValuesDetails.BuildNote(fieldInfo, sb);
                 break;
-            }
+            case TextNormalizingTransformer:
+                TextNormalizingDetails.BuildNote(fieldInfo, sb);
+                break;
+            case WordTokenizingTransformer:
+                WordTokenizingDetails.BuildNote(fieldInfo, sb);
+                break;
+            case TokenizingByCharactersTransformer:
+                TokenizingByCharactersDetails.BuildNote(fieldInfo, sb);
+                break;
+            case ColumnSelectingTransformer:
+                ColumnSelectingDetails.BuildNote(fieldInfo, sb);
+                break;
+            case LpNormNormalizingTransformer:
+                LpNormNormalizingDetails.BuildNote(fieldInfo, sb);
+                break;
+            case NgramExtractingTransformer:
+                NgramExtractingDetails.BuildNote(fieldInfo, sb);
+                break;
+            case ValueToKeyMappingTransformer:
+                ValueToKeyMappingDetails.BuildNote(fieldInfo, sb);
+                break;
             default:
             {
                 foreach (var kvp in fieldInfo)
                 {
-                    sb.AppendLine(kvp.Key + ": " + kvp.Value);
+                    sb.AppendLine($"{kvp.Key}: {kvp.Value}");
                 }
                 break;
             }
@@ -180,14 +236,25 @@ public static class TransformerExtensions
             return string.Empty;
         }
 
+        if (value is string s)
+        {
+            return s;
+        }
+
         if (value is ValueTuple<string, string>[] tuples)
         {
             return string.Join(',', tuples.Select(t => t.Item1 == t.Item2 ? t.Item1 : $"({t.Item1}, {t.Item2})"));
         }
 
-        if (value.GetType().FullName.Contains("ColumnOptions"))
+        if (value is IEnumerable enumerable)
         {
-            return "ColumnOptions";
+            List<string> strs = new();
+            foreach (var obj in enumerable)
+            {
+                strs.Add(GetFieldValue(obj));
+            }
+
+            return string.Join(',', strs);
         }
 
         if (value is object[] objArr)
@@ -195,30 +262,12 @@ public static class TransformerExtensions
             return string.Join(", ", objArr);
         }
 
-        if (value is IEnumerable objEnumerable)
-        {
-            return string.Join(", ", objEnumerable);
-        }
-
         if (value is IEnumerable<object> objEnum)
         {
             return string.Join(", ", objEnum);
         }
 
-
-        return value.ToString();
-    }
-
-    private static string GetName(ITransformer transformer)
-    {
-        if (transformer.GetType().FullName.Contains("TextFeaturizingEstimator"))
-        {
-            return "TextFeaturizingEstimator_Transformer";
-        }
-        
-        string name = transformer.GetType().Name!
-            .Replace("`", "")
-            .Replace("+", "_");
-        return name;
+        return JsonConvert.SerializeObject(value);
+        //return value.ToString() ?? "";
     }
 }
