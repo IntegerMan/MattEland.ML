@@ -227,3 +227,31 @@ type MLCharts =
         let dict = FeatureImportanceHelper.ToImportancesDictionary(imps, features = numFeatures)
         MLCharts.FeatureImportances(dict, "F1 Score")
      
+    static member MetricImprovement(monitor: ContextMonitor) =
+         let results = List.ofSeq monitor.Results
+         let ids = results |> List.map (_.Id)
+         let bestVals = results |> List.map(_.BestMetric)
+         
+         Chart.Line(x = ids, y = bestVals)
+         |> Chart.withTitle("Best Model Improvement over Multiple Trials")
+         |> Chart.withXAxisStyle (TitleText = "Trial Number")
+         |> Chart.withYAxisStyle (TitleText = "Primary Metric Value")
+         |> Chart.withSize(Width = 800)
+         
+    static member MetricImprovementWithTrials(monitor: ContextMonitor) =
+         let results = List.ofSeq monitor.Results
+         let ids = results |> List.map (_.Id)
+         let bestVals = results |> List.map(_.BestMetric)
+         let metrics = results |> List.map(_.Metric)
+         
+         [
+            Chart.Line(x = ids, y = bestVals, Name="Best Result")
+            |> Chart.withLineStyle (Width = 2., Dash = DrawingStyle.Dot)
+            
+            Chart.Point(x = ids, y = metrics, Name="Trial Result")
+         ]
+         |> Chart.combine
+         |> Chart.withTitle("Trial Metrics over Multiple Trials")
+         |> Chart.withXAxisStyle (TitleText = "Trial Number")
+         |> Chart.withYAxisStyle (TitleText = "Primary Metric Value")
+         |> Chart.withSize(Width = 800)
