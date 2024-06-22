@@ -7,6 +7,7 @@ using Microsoft.DotNet.Interactive.Commands;
 using Microsoft.DotNet.Interactive.CSharp;
 using Microsoft.DotNet.Interactive.Formatting;
 using Microsoft.ML;
+using Microsoft.ML.AutoML;
 using Microsoft.ML.Data;
 
 namespace MattEland.ML.Interactive;
@@ -23,6 +24,7 @@ public static class InteractiveExtensions
         {
             SetupReflection(k);
             SetupTransformerVisualizer(k, mermaidKernel);
+            SetupPipelineVisualizer(k, mermaidKernel);
         });
 
         return Task.CompletedTask;
@@ -130,6 +132,67 @@ public static class InteractiveExtensions
                 else
                 {
                     await Console.Error.WriteLineAsync($"{variableName} is not an ITransformer");
+                }
+            }
+        }
+    }
+    
+    private static void SetupPipelineVisualizer(Kernel k, Kernel? mermaidKernel)
+    {
+        if (k is CSharpKernel csharpKernel && mermaidKernel != null)
+        {
+            Argument<string> variableNameArg = new Argument<string>("variable-name", "The name of the variable to analyze")
+                .AddCompletions(ctx => csharpKernel.ScriptState
+                    .Variables
+                    .Where(v => v.Value is SweepablePipeline)
+                    .Select(v => v.Name));
+                
+            var maxDepthOption = new Option<int>(new[] { "-d", "--depth" }, () => 3,
+                "The maximum depth");      
+                
+            var annotateOption = new Option<bool>(new[] { "-n", "--notes" }, () => false,
+                "Whether or not behavior notes will be added to elements on the diagram");
+
+            var mermaidOption = new Option<bool>(new[] { "-m", "--mermaid" }, () => false,
+                "Whether or not the raw mermaid syntax is outputted");
+            
+            Command vizCommand = new("#!pipeline-vis", "Visualizes a pipeline")
+            {
+                variableNameArg,
+                maxDepthOption,
+                annotateOption,
+                mermaidOption
+            };
+            vizCommand.SetHandler(Visualize, variableNameArg, maxDepthOption, annotateOption, mermaidOption);
+            csharpKernel.AddDirective(vizCommand);
+                
+            KernelInvocationContext.Current?.Display(
+                new HtmlString(@"<details><summary>pipeline-vis</summary>
+    <p>This extension generates Flowcharts from Pipelines using the Mermaid kernel.</p>
+    </details>"),
+                "text/html");
+
+            async Task Visualize(
+                string variableName,
+                int maxDepth,
+                bool annotate,
+                bool showMarkdown)
+            {
+                if (csharpKernel.TryGetValue(variableName, out SweepablePipeline pipeline))
+                {
+                    string markdown = pipeline.ToMermaid(annotate, maxDepth);
+
+                    if (showMarkdown)
+                    {
+                        Console.WriteLine(markdown);
+                    }
+
+                    await KernelInvocationContext.Current.HandlingKernel.RootKernel.SendAsync(new SubmitCode(markdown,
+                        targetKernelName: mermaidKernel.Name));
+                }
+                else
+                {
+                    await Console.Error.WriteLineAsync($"{variableName} is not a Pipeline");
                 }
             }
         }
