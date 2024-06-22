@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 
 namespace MattEland.ML;
 
@@ -14,14 +15,38 @@ public static class ReflectionHelper
         return fields.ToDictionary(f => f.Name, f => f.GetValue(obj));
     }
 
-    public static T? GetReflectedValue<T>(this object obj, string fieldName)
+    public static T? GetReflectedValue<T>(this object obj, string fieldName) 
+        => (T?)GetReflectedValue(obj, fieldName);
+
+    public static object? GetReflectedValue(this object obj, string fieldName)
     {
         FieldInfo? field = obj.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
-        if (field == null)
+        
+        return field?.GetValue(obj);
+    }    
+
+    public static string GetShortTypeName(this Type type)
+    {
+        StringBuilder sb = new();
+        if (type.DeclaringType != null)
         {
-            throw new InvalidOperationException($"{obj.GetType().FullName} does not have a reflectable property or field named {fieldName}");
+            sb.Append(GetShortTypeName(type.DeclaringType));
         }
 
-        return (T?)field.GetValue(obj);
+        string name = type.Name;
+        if (name.Contains('`'))
+        {
+            name = name[..name.IndexOf('`')];
+        }
+        sb.Append(name);
+
+        if (type.GenericTypeArguments.Any())
+        {
+            sb.Append('<');
+            sb.Append(string.Join(',', type.GenericTypeArguments.Select(GetShortTypeName)));
+            sb.Append('>');
+        }
+
+        return sb.ToString();
     }
 }

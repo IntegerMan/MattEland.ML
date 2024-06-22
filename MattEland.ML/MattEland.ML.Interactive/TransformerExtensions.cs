@@ -1,8 +1,8 @@
 ﻿using System.Collections;
-using System.Collections.Immutable;
 using System.Reflection;
 using System.Text;
 using MattEland.ML.Interactive.Details;
+using MattEland.ML.Interactive.Nodes;
 using Microsoft.ML;
 using Microsoft.ML.Data;
 using Microsoft.ML.Transforms;
@@ -19,6 +19,21 @@ public static class TransformerExtensions
         sb.AppendLine("stateDiagram-v2");
         int index = 1;
 
+        TransformerNodeTreeParser parser = new();
+
+        PipelineNode root = parser.ParseTree(transformer);
+
+        if (root.HasChildren)
+        {
+            List<PipelineNode> children = root.Children.ToList();
+            sb.AppendLine(BuildFlowchartFromChildren(root, children, index.ToString(), isLR: false, annotate: annotate, maxDepth: maxDepth));
+        }
+        else
+        {
+            sb.AppendLine($"t{index}: {GetDisplayName(root)}");
+        }
+        
+        /*
         List<ITransformer> children = GetChildren(transformer).ToList();
         if (children.Any())
         {
@@ -28,9 +43,63 @@ public static class TransformerExtensions
         {
             sb.AppendLine($"t{index}: {GetDisplayName(transformer)}");
         }
+        */
         return sb.ToString();
     }
 
+    private static string BuildFlowchartFromChildren(this PipelineNode parent, List<PipelineNode> children, string prefix = "", bool isLR = false, bool annotate = false, int maxDepth = 0)
+    {
+        StringBuilder sb = new();
+        sb.AppendLine($"state \"{GetDisplayName(parent)}\" AS t{prefix} {{");
+
+        if (isLR)
+        {
+            sb.AppendLine("direction LR");
+        }
+
+        // Loop over all children
+        int index = 1;
+        foreach (var transformer in children)
+        {
+            // Define the node
+            string id = $"{prefix}_{index++}";
+            sb.AppendLine($"t{id}: {GetDisplayName(transformer)}");
+
+            // Loop over any nested children
+            List<PipelineNode> subTransformers = transformer.Children.ToList();
+            bool renderedChildren = false;
+            if (maxDepth > 1 && subTransformers.Any())
+            {
+                renderedChildren = true;
+                sb.AppendLine(BuildFlowchartFromChildren(
+                    transformer,
+                    subTransformers,
+                    prefix: id, 
+                    isLR: !isLR,
+                    maxDepth: maxDepth - 1,
+                    annotate: annotate));
+            }
+
+            // If we're annotating, it's time to do that. Don't show notes for expanded parents, though.
+            if (annotate && !renderedChildren)
+            {
+                AddNote(sb, $"t{id}", isLR, transformer.Note);
+            }
+        }
+
+        // Render relationships
+        for (int i = 0; i < children.Count - 1; i++)
+        {
+            string a = $"t{prefix}_{i + 1}";
+            string b = $"t{prefix}_{i + 2}";
+
+            sb.AppendLine($"{a} --> {b}");
+        }
+
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+    
     private static IEnumerable<ITransformer> GetChildren(ITransformer transformer)
     {
         FieldInfo? chainField = transformer.GetType().GetField("_chain", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
@@ -43,6 +112,11 @@ public static class TransformerExtensions
         {
             children = chain.ToList();
         }
+        else if (transformer is OneHotEncodingTransformer encoder)
+        {
+            ITransformer? child = encoder.GetReflectedValue<ITransformer>("_transformer");
+            children = child != null ? GetChildren(child) : null;
+        } 
         else
         {
             children = transformer as IEnumerable<ITransformer>;
@@ -57,22 +131,13 @@ public static class TransformerExtensions
         }
     }
 
-    private static string GetDisplayName(ITransformer transformer)
-    {
-        string result = transformer.GetType().Name;
-        Type? declaringType = transformer.GetType().DeclaringType;
-        if (declaringType != null && transformer.GetType() != declaringType)
-        {
-            result = $"{declaringType.Name}.{result}";
-        }
-        
-        return new string(result.Where(c => char.IsLetter(c) || c == '.').ToArray());
-    }
+    private static string GetDisplayName(ITransformer transformer) => transformer.GetType().GetShortTypeName().Replace("<","_").Replace(">","_");
+    
+    private static string GetDisplayName(PipelineNode node) => node.Name.Replace("<","_").Replace(">","_");
 
     private static string BuildFlowchartFromChildren(this ITransformer parent, List<ITransformer> children, string prefix = "", bool isLR = false, bool annotate = false, int maxDepth = 0)
     {
         StringBuilder sb = new();
-        
         sb.AppendLine($"state \"{GetDisplayName(parent)}\" AS t{prefix} {{");
 
         if (isLR)
@@ -151,20 +216,37 @@ public static class TransformerExtensions
         }
 
         string note = BuildNote(transformer, fieldInfo);
-        if (!string.IsNullOrWhiteSpace(note))
+        AddNote(sb, elName, isLR, note);
+    }
+
+    private static void AddNote(StringBuilder sb, string elName, bool isLR, string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note)) return;
+        
+        if (isLR)
         {
-            if (isLR)
+            sb.AppendLine($"note left of {elName}");
+        }
+        else
+        {
+            sb.AppendLine($"note right of {elName}");
+        }
+
+        // Break the note into lines at the word level. Ensure no line is longer than 80 characters.
+        StringBuilder line = new();
+        foreach (var word in note.Split(' '))
+        {
+            if (line.Length + word.Length > 80)
             {
-                sb.AppendLine($"note left of {elName}");
-            }
-            else
-            {
-                sb.AppendLine($"note right of {elName}");
+                sb.AppendLine(line.ToString());
+                line.Clear();
             }
 
-            sb.AppendLine(note);
-            sb.AppendLine("end note");
+            line.Append(word);
+            line.Append(' ');
         }
+        sb.AppendLine(line.ToString().Trim());
+        sb.AppendLine("end note");
     }
 
     private static string BuildNote(ITransformer transformer, Dictionary<string, string> fieldInfo)
@@ -181,7 +263,7 @@ public static class TransformerExtensions
         
         // Not a parent node, so let's get some details
         StringBuilder sb = new();
-        switch (transformer)
+        switch (transformer) // TODO: This should switch to have a parser in front of it and shallow classes capable of handling either estimators or transformers
         {
             case TypeConvertingTransformer:
                 TypeConvertDetails.BuildNote(fieldInfo, sb);
@@ -212,6 +294,9 @@ public static class TransformerExtensions
                 break;
             case ValueToKeyMappingTransformer:
                 ValueToKeyMappingDetails.BuildNote(fieldInfo, sb);
+                break;
+            case KeyToVectorMappingTransformer:
+                KeyToVectorMappingDetails.BuildNote(fieldInfo, sb);
                 break;
             default:
             {

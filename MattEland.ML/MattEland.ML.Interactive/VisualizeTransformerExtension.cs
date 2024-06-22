@@ -53,7 +53,7 @@ public static class InteractiveExtensions
             if (csharpKernel.TryGetValue(variableName, out object obj))
             {
                 StringBuilder sb = new();
-                sb.AppendLine($"<h3>{obj.GetType().Name.HtmlEncode()}</h3>");
+                sb.AppendLine($"<h3>{obj.GetType().GetShortTypeName().HtmlEncode()}</h3>");
                 sb.AppendLine("<table><thead><tr><th>Property</th><th>Type</th><th>Value</th></thead><tbody>");
                 
                 IEnumerable<FieldInfo> fields = obj.GetType()
@@ -61,7 +61,7 @@ public static class InteractiveExtensions
 
                 foreach (var field in fields)
                 {
-                    sb.AppendLine($"<tr><th>{field.Name}</th><td>{(field.FieldType.DeclaringType != null ? field.FieldType.DeclaringType.Name : "")}{field.FieldType.Name}</td><td>{field.GetValue(obj)}</td></tr>");
+                    sb.AppendLine($"<tr><th>{field.Name}</th><td>{field.FieldType.GetShortTypeName().HtmlEncode()}</td><td>{field.GetValue(obj)}</td></tr>");
                 }
 
                 sb.AppendLine("</tbody></table>");
@@ -90,13 +90,17 @@ public static class InteractiveExtensions
             var annotateOption = new Option<bool>(new[] { "-n", "--notes" }, () => false,
                 "Whether or not behavior notes will be added to elements on the diagram");
 
+            var mermaidOption = new Option<bool>(new[] { "-m", "--mermaid" }, () => false,
+                "Whether or not the raw mermaid syntax is outputted");
+            
             Command vizCommand = new("#!transformer-vis", "Visualizes a transformer or transformer chain")
             {
                 variableNameArg,
                 maxDepthOption,
-                annotateOption
+                annotateOption,
+                mermaidOption
             };
-            vizCommand.SetHandler(Visualize, variableNameArg, maxDepthOption, annotateOption);
+            vizCommand.SetHandler(Visualize, variableNameArg, maxDepthOption, annotateOption, mermaidOption);
             csharpKernel.AddDirective(vizCommand);
                 
             KernelInvocationContext.Current?.Display(
@@ -108,11 +112,17 @@ public static class InteractiveExtensions
             async Task Visualize(
                 string variableName,
                 int maxDepth,
-                bool annotate)
+                bool annotate,
+                bool showMarkdown)
             {
                 if (csharpKernel.TryGetValue(variableName, out ITransformer transformer))
                 {
                     string markdown = transformer.ToMermaid(annotate, maxDepth);
+
+                    if (showMarkdown)
+                    {
+                        Console.WriteLine(markdown);
+                    }
 
                     await KernelInvocationContext.Current.HandlingKernel.RootKernel.SendAsync(new SubmitCode(markdown,
                         targetKernelName: mermaidKernel.Name));
