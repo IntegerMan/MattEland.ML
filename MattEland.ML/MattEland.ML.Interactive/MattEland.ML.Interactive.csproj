@@ -5,7 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <Version>0.0.11</Version>
+        <Version>0.0.12</Version>
         <Copyright>Matt Eland</Copyright>
     </PropertyGroup>
 
@@ -15,6 +15,7 @@
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Data.Analysis" Version="0.21.1" />
+      <PackageReference Include="Microsoft.DotNet.Interactive.Formatting" Version="1.0.0-beta.23611.1" />
       <PackageReference Include="Microsoft.ML" Version="3.0.1" />
       <PackageReference Include="Microsoft.ML.AutoML" Version="0.21.1" />
       <PackageReference Include="microsoft.dotnet.interactive" Version="1.0.0-beta.23562.1" />

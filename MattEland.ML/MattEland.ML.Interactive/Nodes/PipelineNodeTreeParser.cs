@@ -18,8 +18,6 @@ public class PipelineNodeTreeParser
     
     private static PipelineNode BuildNode(SweepablePipeline pipeline)
     {
-        MLContext context;
-        context.Auto().Featurizer()
         List<PipelineNode> children = new();
         foreach ((var key, SweepableEstimator? estimator) in pipeline.Estimators)
         {

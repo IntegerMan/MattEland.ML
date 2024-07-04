@@ -15,6 +15,35 @@ type MLCharts =
         0.5,    Color.fromString("#009dcf")
         1,      Color.fromString("#003171")
     ]
+    
+    static member RenderBinaryConfusionMatrix(truePositives: float, falseNegatives: float, falsePositives: float, trueNegatives: float, includePrecisionRecall: bool, classNames: string seq) =
+        let white = Color.fromString("#FFFFFF")
+        let darkBlue = Color.fromString("#003171")
+        let numFormat = "F0"
+        
+        let annotations =
+            [
+                yield Annotation.init(X = 0, Y = 0, Text = truePositives.ToString(numFormat), ShowArrow = false, BGColor = white, BorderColor = darkBlue, Font = Font.init(Size = 18))
+                yield Annotation.init(X = 1, Y = 0, Text = falseNegatives.ToString(numFormat), ShowArrow = false, BGColor = white, BorderColor = darkBlue, Font = Font.init(Size = 18))
+                yield Annotation.init(X = 1, Y = 1, Text = trueNegatives.ToString(numFormat), ShowArrow = false, BGColor = white, BorderColor = darkBlue, Font = Font.init(Size = 18))
+                yield Annotation.init(X = 0, Y = 1, Text = falsePositives.ToString(numFormat), ShowArrow = false, BGColor = white, BorderColor = darkBlue, Font = Font.init(Size = 18))
+            ]
+
+        let matrix = [| [| truePositives; falseNegatives |]; [| falsePositives; trueNegatives |] |]
+
+        let classNames = [| "Positive"; "Negative" |]
+        
+        Chart.Heatmap(zData = matrix,
+                      ColorScale = MLCharts.blues,
+                      // annotationText = text,
+                      X = classNames,
+                      Y = classNames,
+                      ShowScale = false,
+                      ReverseYAxis = true)
+        |> Chart.withTitle "Confusion Matrix" 
+        |> Chart.withXAxisStyle(TitleText = "Predicted", Side = Side.Top, ShowGrid = false, ShowBackground = false, ShowLine = false)
+        |> Chart.withYAxisStyle(TitleText = "Actual", Side = Side.Left, ShowGrid = false, ShowBackground = false, ShowLine = false)
+        |> Chart.withAnnotations(annotations)
 
     static member private RenderStandardConfusionMatrix(cm:ConfusionMatrix, includePrecisionRecall: bool, classNames: string seq) =
         let white = Color.fromString("#FFFFFF")

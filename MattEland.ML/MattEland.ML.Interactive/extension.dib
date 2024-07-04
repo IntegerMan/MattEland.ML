@@ -5,3 +5,29 @@
 #!csharp
 
 MattEland.ML.Interactive.InteractiveExtensions.Load(Microsoft.DotNet.Interactive.KernelInvocationContext.Current.HandlingKernel.RootKernel);
+
+Formatter.Register<HyperparameterCollection>((hyperparameterCollection, writer) =>
+{
+    writer.WriteLine("<h3>Hyperparameters</h3>");
+    
+    writer.WriteLine("<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>");
+    foreach (var kvp in hyperparameterCollection)
+    {
+        if (kvp.Value is Newtonsoft.Json.Linq.JValue jValue)
+        {
+            writer.WriteLine($"<tr><td>{kvp.Key}</td><td>{jValue.Value}</td></tr>");
+        }
+        else if (kvp.Value is Newtonsoft.Json.Linq.JArray jArray) {
+            writer.WriteLine($"<tr><td>{kvp.Key}</td><td>{string.Join(", ", jArray)}</td></tr>");
+        }
+        else if (kvp.Value is IEnumerable<object> enumerable)
+        {
+            writer.WriteLine($"<tr><td>{kvp.Key}</td><td>{string.Join(", ", enumerable)}</td></tr>");
+        }
+        else
+        {
+            writer.WriteLine($"<tr><td>{kvp.Key}</td><td>{kvp.Value}</td></tr>");
+        }
+    }
+    writer.WriteLine("</tbody></table>");
+}, "text/html");
